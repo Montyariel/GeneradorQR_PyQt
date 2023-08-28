@@ -1,7 +1,7 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget, QGraphicsLineItem, QGraphicsRectItem, QGraphicsView, QGraphicsScene, QMessageBox
-from PyQt6.QtGui import QPixmap, QFont, QPen, QColor
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget, QTableWidget, QTableWidgetItem, QMenu, QAction
+from PyQt6.QtGui import QPixmap, QFont, QCursor, QIcon
+from PyQt6.QtCore import Qt, QRect, QPropertyAnimation
 import sqlite3
 import datetime
 import qrcode
@@ -11,19 +11,19 @@ class PantallaInicio(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Pantalla de Inicio")
-        self.setFixedSize(360, 640)  # Establecer tamaño fijo de la ventana
+        self.setFixedSize(360, 640)  # Tamaño fijo de la ventana
 
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
         layout = QVBoxLayout(central_widget)
 
-        # Logo en la parte superior centrado horizontalmente
+        # Logo en la parte superior pegado al borde superior
         logo_label = QLabel(self)
         logo_pixmap = QPixmap("C:/Users/ariel/generadorQr/qrcodes/logo/logomapsa.png")  # Ruta a tu imagen de logo
         logo_pixmap = logo_pixmap.scaledToHeight(200)  # Altura deseada del logo
         logo_label.setPixmap(logo_pixmap)
-        layout.addWidget(logo_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(logo_label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         # Campo de entrada para Código
         self.campo_codigo = QLineEdit(self)
@@ -45,164 +45,106 @@ class PantallaInicio(QMainWindow):
         self.campo_cantidad.setPlaceholderText("Ingrese Cantidad")
         layout.addWidget(self.campo_cantidad, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # Ajustar la longitud de los campos
-        self.campo_codigo.setMinimumWidth(300)
-        self.campo_descripcion.setMinimumWidth(300)
-        self.campo_peso.setMinimumWidth(300)
-        self.campo_cantidad.setMinimumWidth(300)
-
-        # Botón de guardar con estilo personalizado
-        self.boton_guardar = QPushButton("Guardar")
-        self.boton_guardar.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 10px 20px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer;")
+        # Personalizar botones
+        self.boton_guardar = QPushButton("Guardar", self)
+        self.estilo_boton(self.boton_guardar, "#2196F3")  # Azul
         layout.addWidget(self.boton_guardar, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # Botón de generar QR con estilo personalizado
-        self.boton_qr = QPushButton("Generar QR")
-        self.boton_qr.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 10px 20px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer;")
+        self.boton_qr = QPushButton("Generar QR", self)
+        self.estilo_boton(self.boton_qr, "#2196F3")  # Azul
         layout.addWidget(self.boton_qr, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # Botón de siguiente
-        self.boton_siguiente = QPushButton("Siguiente")
-        self.boton_siguiente.setStyleSheet("background-color: #2196F3; color: white; border: none; padding: 10px 20px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer;")
+        self.boton_siguiente = QPushButton("Siguiente", self)
+        self.estilo_boton(self.boton_siguiente, "#2196F3")  # Azul
         layout.addWidget(self.boton_siguiente, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # Conectar el botón de guardar a la función
-        self.boton_guardar.clicked.connect(self.guardar_datos)
+        # Agregar botón de configuración para cambiar el tema
+        self.boton_configuracion = QPushButton(self)
+        self.boton_configuracion.setIcon(QIcon("C:/Users/ariel/generadorQr/qrcodes/config.png"))
+        self.estilo_boton(self.boton_configuracion, "transparent")  # Sin fondo ni borde
+        self.boton_configuracion.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        layout.addWidget(self.boton_configuracion, alignment=Qt.AlignmentFlag.AlignRight)
 
-        # Conectar el botón de generar QR a la función
+        self.boton_configuracion.clicked.connect(self.mostrar_menu_configuracion)
+
+        # Conectar botones a funciones
+        self.boton_guardar.clicked.connect(self.mostrar_datos)
         self.boton_qr.clicked.connect(self.generar_qr)
-
-        # Conectar el botón de siguiente a la función
         self.boton_siguiente.clicked.connect(self.limpiar_campos)
 
-        # Leyenda de error en campos vacíos
-        self.mensaje_error = QLabel("")
-        self.mensaje_error.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.mensaje_error.setStyleSheet("color: black; font-weight: bold;")
+        # Sección inferior oculta
+        self.seccion_inferior = QWidget(self)
+        self.seccion_inferior.hide()
+        self.layout_seccion_inferior = QVBoxLayout(self.seccion_inferior)
 
-        # Leyenda de éxito en guardar
-        self.mensaje_exito = QLabel("")
-        self.mensaje_exito.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.mensaje_exito.setStyleSheet("color: green; font-weight: bold;")
+        self.qr_label = QLabel(self)
+        self.layout_seccion_inferior.addWidget(self.qr_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        layout.addWidget(self.mensaje_error, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.mensaje_exito, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.tabla_datos = QTableWidget(self)
+        self.tabla_datos.setColumnCount(4)
+        self.tabla_datos.setHorizontalHeaderLabels(["Código", "Descripción", "Peso", "Cantidad"])
+        self.layout_seccion_inferior.addWidget(self.tabla_datos, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Inicializar gráficos para las líneas de mensajes
-        self.scene = QGraphicsScene()
-        self.view = QGraphicsView(self.scene)
-        layout.addWidget(self.view)
+        layout.addWidget(self.seccion_inferior)
 
-        # Timer para animar las líneas de mensaje
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.animar_lineas_mensaje)
+        # Animación de deslizamiento
+        self.animation = QPropertyAnimation(self.seccion_inferior, b"geometry")
+        self.animation.setDuration(500)
+        self.animation.setStartValue(QRect(0, 320, 360, 320))
+        self.animation.setEndValue(QRect(0, 0, 720, 640))  # Amplía el ancho de la pantalla
 
-        # Variables de posición para animar las líneas de mensaje
-        self.linea_x = 0
-        self.linea_y = 20
+        # Tema actual (claro por defecto)
+        self.tema_oscuro = False
 
-        # Bandera para controlar la animación
-        self.animando = False
+    def estilo_boton(self, boton, color):
+        boton.setStyleSheet(
+            f"background-color: {color}; color: white; border: none; "
+            "padding: 10px 20px; text-align: center; text-decoration: none; "
+            "display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer;"
+        )
 
-        # Crear la tabla si no existe
-        self.crear_tabla()
+    def mostrar_datos(self):
+        # Mostrar la sección inferior con animación
+        if not self.seccion_inferior.isVisible():
+            self.animation.start()
+            self.seccion_inferior.show()
 
-    def crear_tabla(self):
-        try:
-            conn = sqlite3.connect("movimientos.db")
-            cursor = conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS movimientos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    codigo TEXT,
-                    descripcion TEXT,
-                    peso REAL,
-                    cantidad INTEGER,
-                    fecha_hora TEXT,
-                    usuario TEXT,
-                    sector TEXT
-                )
-            ''')
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            self.mostrar_mensaje(f"Error al crear la tabla: {e}", is_error=True)
-
-    def guardar_datos(self):
-        codigo = self.campo_codigo.text()
-        descripcion = self.campo_descripcion.text()
-        peso = self.campo_peso.text()
-        cantidad = self.campo_cantidad.text()
-
-        if codigo and descripcion and peso and cantidad:
-            try:
-                conn = sqlite3.connect("movimientos.db")
-                cursor = conn.cursor()
-
-                fecha_hora_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                cursor.execute("INSERT INTO movimientos (codigo, descripcion, peso, cantidad, fecha_hora, usuario, sector) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                               (codigo, descripcion, peso, cantidad, fecha_hora_actual, "NombreUsuario", "Sector"))
-
-                conn.commit()
-                conn.close()
-
-                self.mostrar_mensaje("Guardado exitoso", is_error=False)
-            except Exception as e:
-                self.mostrar_mensaje(f"Error al guardar los datos: {e}", is_error=True)
-        else:
-            self.mostrar_mensaje("Faltan completar algunos campos.", is_error=True)
-
-    def mostrar_mensaje(self, mensaje, is_error=False):
-        if is_error:
-            self.mensaje_error.setStyleSheet("color: red; font-weight: bold;")
-            self.mensaje_error.setText(mensaje)
-            self.animar_lineas_mensaje()
-        else:
-            self.mensaje_exito.setStyleSheet("color: green; font-weight: bold;")
-            self.mensaje_exito.setText(mensaje)
-            self.animar_lineas_mensaje()
-
-    def animar_lineas_mensaje(self):
-        if not self.animando:
-            self.animando = True
-            self.linea_x = 0
-            self.timer.start(100)
+            # Aquí deberías agregar el código para mostrar el código QR en el QLabel qr_label
+            # Puedes cargar la imagen del código QR y configurarla en qr_label
 
     def generar_qr(self):
-        codigo = self.campo_codigo.text()
-        descripcion = self.campo_descripcion.text()
-        peso = self.campo_peso.text()
-        cantidad = self.campo_cantidad.text()
-
-        if codigo and descripcion and peso and cantidad:
-            try:
-                unique_code = f"{codigo}_{descripcion}_{peso}_{cantidad}"
-                qr = qrcode.QRCode(
-                    version=1,
-                    error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=10,
-                    border=4,
-                )
-                qr.add_data(unique_code)
-                qr.make(fit=True)
-
-                qr_image = qr.make_image(fill_color="black", back_color="white")
-                qr_image_path = f"qrcodes/{unique_code}.png"
-                qr_image.save(qr_image_path)
-
-                self.mostrar_mensaje("Código QR generado.", is_error=False)
-            except Exception as e:
-                self.mostrar_mensaje(f"Error al generar el código QR: {e}", is_error=True)
-        else:
-            self.mostrar_mensaje("Faltan completar algunos campos.", is_error=True)
+        # Aquí va el código para generar el código QR y guardarlo en una ubicación específica
+        # Luego, puedes usar la ubicación del archivo generado para mostrarlo en qr_label en la función mostrar_datos
+        pass
 
     def limpiar_campos(self):
+        # Limpiar los campos de entrada
         self.campo_codigo.clear()
         self.campo_descripcion.clear()
         self.campo_peso.clear()
         self.campo_cantidad.clear()
-        self.mostrar_mensaje("", is_error=False)
+
+    def mostrar_menu_configuracion(self):
+        menu = QMenu(self)
+
+        tema_dia = QAction("Modo Día", self)
+        tema_noche = QAction("Modo Noche", self)
+
+        menu.addAction(tema_dia)
+        menu.addAction(tema_noche)
+
+        tema_dia.triggered.connect(self.activar_modo_dia)
+        tema_noche.triggered.connect(self.activar_modo_noche)
+
+        menu.exec_(self.boton_configuracion.mapToGlobal(self.boton_configuracion.rect().bottomRight()))
+
+    def activar_modo_dia(self):
+        self.setStyleSheet("")  # Eliminar cualquier hoja de estilo
+        self.tema_oscuro = False
+
+    def activar_modo_noche(self):
+        self.setStyleSheet("background-color: #333; color: white;")  # Establecer estilo oscuro
+        self.tema_oscuro = True
 
 def main():
     app = QApplication(sys.argv)
@@ -212,4 +154,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
